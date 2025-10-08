@@ -1,6 +1,6 @@
 # AstroGuard: Earth's Sentinel 🛡️
 
-An interactive asteroid impact visualization tool that allows users to simulate asteroid impacts and test deflection strategies using real NASA data. Built for hackathons and educational purposes.
+An interactive asteroid impact visualization tool that allows users to simulate asteroid impacts and test deflection strategies using real NASA data.
 
 ## 🌟 Features
 
