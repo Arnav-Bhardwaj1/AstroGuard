@@ -9,7 +9,6 @@ An interactive asteroid impact visualization tool that allows users to simulate 
 - **Impact Simulation**: Calculate impact energy, crater size, and tsunami risk
 - **Deflection Testing**: Apply velocity changes to test asteroid deflection strategies
 - **Educational**: Learn about orbital mechanics and planetary defense
-- **Gamification**: "Defend Earth" mode with mission-style interface
 
 ## 🚀 Quick Start
 
@@ -54,10 +53,6 @@ cd frontend
 npm install
 npm run dev
 ```
-
-The application will be available at:
-- Frontend: http://localhost:3000
-- Backend API: http://localhost:5000
 
 ## 🛠️ Tech Stack
 
