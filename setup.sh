@@ -25,3 +25,4 @@ echo "2. Start the frontend: cd frontend && npm run dev"
 echo
 
 
+
