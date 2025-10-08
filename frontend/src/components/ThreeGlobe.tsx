@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useMemo } from 'react';
-import { Canvas, useFrame, useThree } from '@react-three/fiber';
+import { Canvas, useFrame, useThree, useLoader } from '@react-three/fiber';
 import { Sphere, Line, Text } from '@react-three/drei';
 import * as THREE from 'three';
 
@@ -24,25 +24,46 @@ const latLngToVector3 = (lat: number, lng: number, radius: number = 1) => {
   );
 };
 
-// Earth component with texture
+// Earth component with textures and cloud layer
 const Earth: React.FC = () => {
-  const meshRef = useRef<THREE.Mesh>(null);
-  
+  const earthRef = useRef<THREE.Mesh>(null);
+  const cloudsRef = useRef<THREE.Mesh>(null);
+
+  // Public domain textures from three.js examples CDN
+  const colorMap = useLoader(THREE.TextureLoader, 'https://threejs.org/examples/textures/planets/earth_atmos_2048.jpg');
+  const specularMap = useLoader(THREE.TextureLoader, 'https://threejs.org/examples/textures/planets/earth_specular_2048.jpg');
+  const cloudsMap = useLoader(THREE.TextureLoader, 'https://threejs.org/examples/textures/planets/earth_clouds_1024.png');
+
   useFrame((state) => {
-    if (meshRef.current) {
-      meshRef.current.rotation.y = state.clock.elapsedTime * 0.1;
+    const t = state.clock.elapsedTime;
+    if (earthRef.current) {
+      earthRef.current.rotation.y = t * 0.1;
+    }
+    if (cloudsRef.current) {
+      cloudsRef.current.rotation.y = t * 0.12;
     }
   });
 
   return (
-    <Sphere ref={meshRef} args={[1, 64, 64]}>
-      <meshPhongMaterial
-        color="#1e40af"
-        shininess={100}
-        transparent
-        opacity={0.8}
-      />
-    </Sphere>
+    <group>
+      <Sphere ref={earthRef} args={[1, 64, 64]}>
+        <meshPhongMaterial
+          map={colorMap}
+          specularMap={specularMap}
+          specular={new THREE.Color('#333333')}
+          shininess={20}
+        />
+      </Sphere>
+      {/* Cloud layer slightly above surface */}
+      <Sphere ref={cloudsRef} args={[1.01, 64, 64]}>
+        <meshPhongMaterial
+          map={cloudsMap}
+          transparent
+          opacity={0.8}
+          depthWrite={false}
+        />
+      </Sphere>
+    </group>
   );
 };
 

@@ -196,3 +196,4 @@ def calculate_impact_effects(energy_mt: float, impact_lat: float, impact_lon: fl
         'target_type': target_type,
         'energy_megatons': energy_mt
     }
+

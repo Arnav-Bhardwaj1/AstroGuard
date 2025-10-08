@@ -212,3 +212,4 @@ export const ResultsDisplay: React.FC<ResultsDisplayProps> = ({
     </div>
   );
 };
+

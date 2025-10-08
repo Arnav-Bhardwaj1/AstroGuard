@@ -23,3 +23,5 @@ echo 1. Start the backend: cd backend && venv\Scripts\activate && python app.py
 echo 2. Start the frontend: cd frontend && npm run dev
 echo.
 pause
+
+
