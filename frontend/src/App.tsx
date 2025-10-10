@@ -7,6 +7,7 @@ import { ResultsDisplay } from './components/ResultsDisplay';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { Asteroid, SimulationParams, SimulationResult } from './types';
 import { asteroidApi } from './utils/api';
+import 'leaflet/dist/leaflet.css';
 
 function App() {
   const [selectedAsteroid, setSelectedAsteroid] = useState<Asteroid | null>(null);
