@@ -197,3 +197,49 @@ def calculate_impact_effects(energy_mt: float, impact_lat: float, impact_lon: fl
         'energy_megatons': energy_mt
     }
 
+def calculate_combined_effects(impacts: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """
+    Calculate combined effects from multiple asteroid impacts.
+    
+    Args:
+        impacts: List of impact effect dictionaries
+        
+    Returns:
+        Combined effects dictionary
+    """
+    if not impacts:
+        return {
+            'total_energy_mt': 0,
+            'max_crater_km': 0,
+            'combined_seismic': 0,
+            'tsunami_risk': False,
+            'impact_count': 0,
+            'individual_impacts': []
+        }
+    
+    total_energy = sum(i.get('energy_megatons', 0) for i in impacts)
+    max_crater = max(i.get('crater_diameter_km', 0) for i in impacts)
+    
+    # Combined seismic: energy adds, but magnitude is logarithmic
+    # Approximate combined magnitude from total energy
+    combined_seismic = 4.5 + 0.67 * math.log10(total_energy) if total_energy > 0 else 0
+    
+    # Tsunami risk from any ocean impact
+    tsunami_risk = any(i.get('tsunami_risk', False) for i in impacts)
+    
+    # Largest fireball
+    max_fireball = max(i.get('fireball_radius_km', 0) for i in impacts)
+    
+    # Total devastation area (simplified - sum of circular areas)
+    total_crater_area = sum(math.pi * (i.get('crater_diameter_km', 0) / 2) ** 2 for i in impacts)
+    
+    return {
+        'total_energy_mt': total_energy,
+        'max_crater_km': max_crater,
+        'total_crater_area_km2': total_crater_area,
+        'combined_seismic': combined_seismic,
+        'max_fireball_km': max_fireball,
+        'tsunami_risk': tsunami_risk,
+        'impact_count': len(impacts),
+        'individual_impacts': impacts
+    }

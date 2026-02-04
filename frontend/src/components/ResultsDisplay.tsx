@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { SimulationResult } from '../types';
-import { Zap, Target, Waves, Activity, Info } from 'lucide-react';
+import { Zap, Target, Waves, Activity, Info, History, Scale } from 'lucide-react';
+import { historicalApi, HistoricalComparison } from '../utils/api';
 
 interface ResultsDisplayProps {
   simulationResult: SimulationResult | null;
@@ -11,6 +12,25 @@ export const ResultsDisplay: React.FC<ResultsDisplayProps> = ({
   simulationResult,
   isSimulating
 }) => {
+  const [comparison, setComparison] = useState<HistoricalComparison | null>(null);
+  const [comparisonLoading, setComparisonLoading] = useState(false);
+
+  // Fetch historical comparison when simulation result changes
+  useEffect(() => {
+    if (simulationResult && simulationResult.impact_energy_mt > 0) {
+      setComparisonLoading(true);
+      historicalApi.getComparison(
+        simulationResult.impact_energy_mt,
+        simulationResult.crater_diameter_km
+      )
+        .then(setComparison)
+        .catch(console.error)
+        .finally(() => setComparisonLoading(false));
+    } else {
+      setComparison(null);
+    }
+  }, [simulationResult]);
+
   if (isSimulating) {
     return (
       <div className="bg-space-900 text-white p-6 rounded-lg shadow-lg">
@@ -108,8 +128,8 @@ export const ResultsDisplay: React.FC<ResultsDisplayProps> = ({
           </div>
           <div className="text-sm text-space-300">Kilometers</div>
           <div className="mt-2 text-xs text-space-400">
-            {simulationResult.crater_diameter_km > 100 ? 'Regional devastation' : 
-             simulationResult.crater_diameter_km > 10 ? 'City-level impact' : 'Localized damage'}
+            {simulationResult.crater_diameter_km > 100 ? 'Regional devastation' :
+              simulationResult.crater_diameter_km > 10 ? 'City-level impact' : 'Localized damage'}
           </div>
         </div>
       </div>
@@ -117,7 +137,7 @@ export const ResultsDisplay: React.FC<ResultsDisplayProps> = ({
       {/* Secondary Effects */}
       <div className="space-y-4 mb-6">
         <h3 className="font-bold text-lg text-asteroid-400">Secondary Effects</h3>
-        
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* Tsunami Risk */}
           <div className="bg-space-800 p-4 rounded-lg">
@@ -126,14 +146,13 @@ export const ResultsDisplay: React.FC<ResultsDisplayProps> = ({
                 <Waves className="mr-2" size={16} />
                 Tsunami Risk
               </h4>
-              <span className={`text-sm font-bold ${
-                simulationResult.tsunami_risk ? 'text-red-400' : 'text-green-400'
-              }`}>
+              <span className={`text-sm font-bold ${simulationResult.tsunami_risk ? 'text-red-400' : 'text-green-400'
+                }`}>
                 {simulationResult.tsunami_risk ? 'HIGH' : 'LOW'}
               </span>
             </div>
             <div className="text-sm text-space-300">
-              {simulationResult.tsunami_risk 
+              {simulationResult.tsunami_risk
                 ? 'Underwater impact detected - tsunami likely'
                 : 'Land impact - no tsunami risk'
               }
@@ -185,6 +204,86 @@ export const ResultsDisplay: React.FC<ResultsDisplayProps> = ({
           <div className="text-sm text-green-200 mt-1">
             Miss distance achieved - Earth is safe!
           </div>
+        </div>
+      )}
+
+      {/* Historical Comparison */}
+      {comparison && (
+        <div className="mt-6 p-4 bg-gradient-to-r from-purple-900/50 to-violet-800/50 rounded-lg border border-purple-500/30">
+          <h4 className="font-bold text-purple-300 mb-3 flex items-center">
+            <History className="mr-2" size={16} />
+            Historical Comparison
+          </h4>
+
+          <div className="flex items-center gap-4 mb-4">
+            <div className="text-4xl">{comparison.closest_impact.emoji}</div>
+            <div>
+              <div className="text-lg font-bold text-white">
+                {comparison.closest_impact.name}
+              </div>
+              <div className="text-sm text-purple-200">
+                {comparison.closest_impact.location} • {comparison.closest_impact.age_display}
+              </div>
+            </div>
+          </div>
+
+          <div className="text-sm text-purple-100 mb-3">
+            {comparison.closest_impact.description}
+          </div>
+
+          {/* Energy Comparison Bar */}
+          <div className="bg-space-800 rounded-lg p-3 mb-3">
+            <div className="flex items-center justify-between text-xs mb-2">
+              <span className="text-space-300">Your Impact</span>
+              <span className="text-space-300">{comparison.closest_impact.name}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="flex-1 bg-space-700 rounded-full h-4 overflow-hidden">
+                <div
+                  className="bg-gradient-to-r from-red-500 to-orange-500 h-full rounded-full transition-all"
+                  style={{
+                    width: `${Math.min(100, comparison.energy_ratio * 100)}%`
+                  }}
+                />
+              </div>
+              <span className="text-xs font-mono text-white w-16 text-right">
+                {comparison.energy_ratio < 0.01
+                  ? '<1%'
+                  : comparison.energy_ratio > 100
+                    ? `${Math.round(comparison.energy_ratio)}x`
+                    : `${(comparison.energy_ratio * 100).toFixed(0)}%`
+                }
+              </span>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            <div className="bg-space-800/50 rounded p-2">
+              <Scale size={14} className="text-purple-400 mb-1" />
+              <div className="text-white font-medium">
+                {comparison.comparison_text}
+              </div>
+            </div>
+            <div className="bg-space-800/50 rounded p-2">
+              <Zap size={14} className="text-yellow-400 mb-1" />
+              <div className="text-white font-medium">
+                {comparison.hiroshima_text}
+              </div>
+            </div>
+          </div>
+
+          {comparison.closest_impact.effects && (
+            <div className="mt-3 text-xs text-purple-200">
+              <strong>Effects of {comparison.closest_impact.name}:</strong> {comparison.closest_impact.effects}
+            </div>
+          )}
+        </div>
+      )}
+
+      {comparisonLoading && (
+        <div className="mt-6 p-4 bg-space-800 rounded-lg animate-pulse">
+          <div className="h-4 bg-space-700 rounded w-1/2 mb-2"></div>
+          <div className="h-4 bg-space-700 rounded w-3/4"></div>
         </div>
       )}
 
