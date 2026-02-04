@@ -5,6 +5,7 @@ import { ThreeGlobe } from './components/ThreeGlobe';
 import { MapView } from './components/MapView';
 import { ResultsDisplay } from './components/ResultsDisplay';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { NeoDashboard } from './components/NeoDashboard';
 import { Asteroid, SimulationParams, SimulationResult } from './types';
 import { asteroidApi } from './utils/api';
 import 'leaflet/dist/leaflet.css';
@@ -22,6 +23,7 @@ function App() {
   const [animationSpeed, setAnimationSpeed] = useState(1); // 0.5x to 3x speed
   const [useLeafletMap, setUseLeafletMap] = useState(false);
   const [useThreeGlobe, setUseThreeGlobe] = useState(true);
+  const [activeView, setActiveView] = useState<'simulation' | 'dashboard'>('simulation');
   const rafRef = useRef<number | null>(null);
 
   // Load settings from localStorage on mount
@@ -30,7 +32,7 @@ function App() {
     const savedSpeed = localStorage.getItem('astroguard-animation-speed');
     const savedLeaflet = localStorage.getItem('astroguard-use-leaflet');
     const savedGlobe = localStorage.getItem('astroguard-use-globe');
-    
+
     if (savedQuality) setQuality(savedQuality);
     if (savedSpeed) setAnimationSpeed(parseFloat(savedSpeed));
     if (savedLeaflet) setUseLeafletMap(savedLeaflet === 'true');
@@ -64,7 +66,7 @@ function App() {
     console.log('Starting simulation with params:', params);
     setIsSimulating(true);
     setImpactLocation({ lat: params.impactLat, lng: params.impactLon });
-    
+
     try {
       const result = await asteroidApi.simulateImpact(params);
       console.log('Simulation result:', result);
@@ -80,7 +82,7 @@ function App() {
         tsunami_risk: false,
         seismic_magnitude: 6.2,
         fireball_radius_km: 2.1,
-        target_type: 'rock',
+        target_type: 'rock' as const,
         original_trajectory: Array.from({ length: 100 }, (_, i) => [
           1e11 * Math.cos(i * 0.06),
           1e11 * Math.sin(i * 0.06),
@@ -141,161 +143,190 @@ function App() {
   return (
     <ErrorBoundary>
       <div className="min-h-screen bg-gradient-to-br from-space-900 via-space-800 to-space-900">
-      {/* Header */}
-      <header className="bg-space-900 border-b border-space-700">
-        <div className="container mx-auto px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-4">
-              <div className="text-4xl">🛡️</div>
-              <div>
-                <h1 className="text-3xl font-bold text-white font-space">
-                  AstroGuard: Earth's Sentinel
-                </h1>
-                <p className="text-space-300 text-sm">
-                  Interactive Asteroid Impact Visualization & Defense Simulation
-                </p>
+        {/* Header */}
+        <header className="bg-space-900 border-b border-space-700">
+          <div className="container mx-auto px-6 py-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-4">
+                <div className="text-4xl">🛡️</div>
+                <div>
+                  <h1 className="text-3xl font-bold text-white font-space">
+                    AstroGuard: Earth's Sentinel
+                  </h1>
+                  <p className="text-space-300 text-sm">
+                    Interactive Asteroid Impact Visualization & Defense Simulation
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center space-x-6">
+                {/* Tab Navigation */}
+                <div className="flex bg-space-800 rounded-lg p-1">
+                  <button
+                    onClick={() => setActiveView('dashboard')}
+                    className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${activeView === 'dashboard'
+                      ? 'bg-asteroid-600 text-white'
+                      : 'text-space-300 hover:text-white'
+                      }`}
+                  >
+                    📊 NEO Dashboard
+                  </button>
+                  <button
+                    onClick={() => setActiveView('simulation')}
+                    className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${activeView === 'simulation'
+                      ? 'bg-asteroid-600 text-white'
+                      : 'text-space-300 hover:text-white'
+                      }`}
+                  >
+                    💥 Simulation
+                  </button>
+                </div>
+                <div className="text-right">
+                  <div className="text-asteroid-400 font-bold text-lg">Mission Status</div>
+                  <div className="text-green-400 text-sm">Operational</div>
+                </div>
               </div>
             </div>
-            <div className="text-right">
-              <div className="text-asteroid-400 font-bold text-lg">Mission Status</div>
-              <div className="text-green-400 text-sm">Operational</div>
-            </div>
           </div>
-        </div>
-      </header>
+        </header>
 
-      {/* Main Content */}
-      <main className="container mx-auto px-6 py-8">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-          {/* Control Panel - Left Column */}
-          <div className="lg:col-span-3">
-            <ControlPanel
-              onSimulate={handleSimulate}
-              onMitigationChange={handleMitigationChange}
-              isSimulating={isSimulating}
-              selectedAsteroid={selectedAsteroid}
-              onAsteroidSelect={handleAsteroidSelect}
-              quality={quality}
-              onQualityChange={setQuality}
-              time={time}
-              onTimeChange={setTime}
-              isPlaying={isPlaying}
-              onTogglePlay={setIsPlaying}
-              animationSpeed={animationSpeed}
-              onAnimationSpeedChange={setAnimationSpeed}
-              useLeafletMap={useLeafletMap}
-              onToggleLeaflet={setUseLeafletMap}
-              useThreeGlobe={useThreeGlobe}
-              onToggleThreeGlobe={setUseThreeGlobe}
-            />
-          </div>
-
-          {/* Visualization Area - Right Column */}
-          <div className="lg:col-span-9 space-y-6">
-            {/* 3D Scene */}
-            <div className="bg-space-800 rounded-lg p-4">
-              <h2 className="text-xl font-bold text-white mb-4 font-space">
-                3D Trajectory Visualization
-              </h2>
-              <div className="h-96">
-                {useThreeGlobe ? (
-                  <ThreeGlobe
-                    originalTrajectory={simulationResult?.original_trajectory || []}
-                    deflectedTrajectory={simulationResult?.deflected_trajectory || []}
-                    impactLocation={impactLocation}
+        {/* Main Content */}
+        <main className="container mx-auto px-6 py-8">
+          {activeView === 'dashboard' ? (
+            <NeoDashboard />
+          ) : (
+            <>
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+                {/* Control Panel - Left Column */}
+                <div className="lg:col-span-3">
+                  <ControlPanel
+                    onSimulate={handleSimulate}
+                    onMitigationChange={handleMitigationChange}
                     isSimulating={isSimulating}
+                    selectedAsteroid={selectedAsteroid}
+                    onAsteroidSelect={handleAsteroidSelect}
                     quality={quality}
+                    onQualityChange={setQuality}
                     time={time}
+                    onTimeChange={setTime}
+                    isPlaying={isPlaying}
+                    onTogglePlay={setIsPlaying}
+                    animationSpeed={animationSpeed}
+                    onAnimationSpeedChange={setAnimationSpeed}
+                    useLeafletMap={useLeafletMap}
+                    onToggleLeaflet={setUseLeafletMap}
+                    useThreeGlobe={useThreeGlobe}
+                    onToggleThreeGlobe={setUseThreeGlobe}
                   />
-                ) : (
-                  <ThreeScene
-                    originalTrajectory={simulationResult?.original_trajectory || []}
-                    deflectedTrajectory={simulationResult?.deflected_trajectory || []}
-                    impactLocation={impactLocation}
-                    isSimulating={isSimulating}
-                    quality={quality}
-                    time={time}
-                  />
-                )}
-              </div>
-            </div>
+                </div>
 
-            {/* 2D Map and Results */}
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-              {/* Map View */}
-              <div className="bg-space-800 rounded-lg p-4">
-                <h2 className="text-xl font-bold text-white mb-4 font-space">
-                  Impact Zone Analysis
-                </h2>
-                <div className="h-80">
-                  <MapView
-                    simulationResult={simulationResult}
-                    impactLocation={impactLocation}
-                    isSimulating={isSimulating}
-                    useLeaflet={useLeafletMap}
-                  />
+                {/* Visualization Area - Right Column */}
+                <div className="lg:col-span-9 space-y-6">
+                  {/* 3D Scene */}
+                  <div className="bg-space-800 rounded-lg p-4">
+                    <h2 className="text-xl font-bold text-white mb-4 font-space">
+                      3D Trajectory Visualization
+                    </h2>
+                    <div className="h-96">
+                      {useThreeGlobe ? (
+                        <ThreeGlobe
+                          originalTrajectory={simulationResult?.original_trajectory || []}
+                          deflectedTrajectory={simulationResult?.deflected_trajectory || []}
+                          impactLocation={impactLocation}
+                          isSimulating={isSimulating}
+                          quality={quality}
+                          time={time}
+                        />
+                      ) : (
+                        <ThreeScene
+                          originalTrajectory={simulationResult?.original_trajectory || []}
+                          deflectedTrajectory={simulationResult?.deflected_trajectory || []}
+                          impactLocation={impactLocation}
+                          isSimulating={isSimulating}
+                          quality={quality}
+                          time={time}
+                        />
+                      )}
+                    </div>
+                  </div>
+
+                  {/* 2D Map and Results */}
+                  <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                    {/* Map View */}
+                    <div className="bg-space-800 rounded-lg p-4">
+                      <h2 className="text-xl font-bold text-white mb-4 font-space">
+                        Impact Zone Analysis
+                      </h2>
+                      <div className="h-80">
+                        <MapView
+                          simulationResult={simulationResult}
+                          impactLocation={impactLocation}
+                          isSimulating={isSimulating}
+                          useLeaflet={useLeafletMap}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Results Display */}
+                    <div>
+                      <ResultsDisplay
+                        simulationResult={simulationResult}
+                        isSimulating={isSimulating}
+                      />
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              {/* Results Display */}
-              <div>
-                <ResultsDisplay
-                  simulationResult={simulationResult}
-                  isSimulating={isSimulating}
-                />
-              </div>
+              {/* Mission Briefing */}
+              {!simulationResult && !isSimulating && (
+                <div className="mt-8 bg-gradient-to-r from-asteroid-900 to-asteroid-800 rounded-lg p-6">
+                  <h2 className="text-2xl font-bold text-white mb-4 font-space">
+                    Mission Briefing
+                  </h2>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-white">
+                    <div className="text-center">
+                      <div className="text-4xl mb-2">🔍</div>
+                      <h3 className="font-bold text-lg mb-2">Detect</h3>
+                      <p className="text-sm text-asteroid-200">
+                        Select a potentially hazardous asteroid from NASA's database
+                      </p>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-4xl mb-2">💥</div>
+                      <h3 className="font-bold text-lg mb-2">Simulate</h3>
+                      <p className="text-sm text-asteroid-200">
+                        Run impact simulations to understand potential consequences
+                      </p>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-4xl mb-2">🛡️</div>
+                      <h3 className="font-bold text-lg mb-2">Deflect</h3>
+                      <p className="text-sm text-asteroid-200">
+                        Test deflection strategies to protect Earth from impacts
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </main>
+
+        {/* Footer */}
+        <footer className="bg-space-900 border-t border-space-700 mt-12">
+          <div className="container mx-auto px-6 py-6">
+            <div className="text-center text-space-400 text-sm">
+              <p>
+                Data provided by NASA JPL and USGS | Built for educational purposes
+              </p>
+              <p className="mt-2">
+                AstroGuard: Earth's Sentinel - Interactive Asteroid Defense Simulation
+              </p>
             </div>
           </div>
-        </div>
-
-        {/* Mission Briefing */}
-        {!simulationResult && !isSimulating && (
-          <div className="mt-8 bg-gradient-to-r from-asteroid-900 to-asteroid-800 rounded-lg p-6">
-            <h2 className="text-2xl font-bold text-white mb-4 font-space">
-              Mission Briefing
-            </h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-white">
-              <div className="text-center">
-                <div className="text-4xl mb-2">🔍</div>
-                <h3 className="font-bold text-lg mb-2">Detect</h3>
-                <p className="text-sm text-asteroid-200">
-                  Select a potentially hazardous asteroid from NASA's database
-                </p>
-              </div>
-              <div className="text-center">
-                <div className="text-4xl mb-2">💥</div>
-                <h3 className="font-bold text-lg mb-2">Simulate</h3>
-                <p className="text-sm text-asteroid-200">
-                  Run impact simulations to understand potential consequences
-                </p>
-              </div>
-              <div className="text-center">
-                <div className="text-4xl mb-2">🛡️</div>
-                <h3 className="font-bold text-lg mb-2">Deflect</h3>
-                <p className="text-sm text-asteroid-200">
-                  Test deflection strategies to protect Earth from impacts
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
-      </main>
-
-      {/* Footer */}
-      <footer className="bg-space-900 border-t border-space-700 mt-12">
-        <div className="container mx-auto px-6 py-6">
-          <div className="text-center text-space-400 text-sm">
-            <p>
-              Data provided by NASA JPL and USGS | Built for educational purposes
-            </p>
-            <p className="mt-2">
-              AstroGuard: Earth's Sentinel - Interactive Asteroid Defense Simulation
-            </p>
-          </div>
-        </div>
-      </footer>
+        </footer>
       </div>
-    </ErrorBoundary>
+    </ErrorBoundary >
   );
 }
 

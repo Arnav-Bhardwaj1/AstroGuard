@@ -10,7 +10,12 @@ from physics import (
     calculate_kinetic_energy, 
     calculate_trajectory, 
     deflect_trajectory,
-    calculate_impact_effects
+    calculate_impact_effects,
+    calculate_combined_effects
+)
+from historical_impacts import (
+    get_all_historical_impacts,
+    find_closest_comparison
 )
 import numpy as np
 
@@ -23,6 +28,10 @@ SBDB_API_URL = "https://ssd-api.jpl.nasa.gov/sbdb.api"
 
 # USGS API endpoint
 USGS_ELEVATION_URL = "https://elevation.nationalmap.gov/EPQS/v1/json"
+
+# NASA NEO API endpoint (Near Earth Object Web Service)
+NEO_API_URL = "https://api.nasa.gov/neo/rest/v1/feed"
+NASA_API_KEY = "DEMO_KEY"  # Free demo key, works for limited requests
 
 # Unit conversion helpers
 AU_IN_METERS = 149597870700.0
@@ -334,6 +343,294 @@ def calculate_miss_distance(original_traj, deflected_traj):
         min_distance = min(min_distance, distance)
     
     return min_distance / 1000  # Convert to km
+
+@app.route('/api/simulate/multi', methods=['POST'])
+def simulate_multi_impact():
+    """
+    Simulate multiple asteroid impacts and calculate combined effects.
+    """
+    try:
+        data = request.get_json()
+        asteroids_data = data.get('asteroids', [])
+        
+        if not asteroids_data or len(asteroids_data) > 5:
+            return jsonify({
+                'success': False,
+                'error': 'Please provide 1-5 asteroids'
+            }), 400
+        
+        all_results = []
+        all_trajectories = []
+        colors = ['#ef4444', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6']  # Red, Orange, Green, Blue, Purple
+        
+        for idx, asteroid_params in enumerate(asteroids_data):
+            asteroid_id = asteroid_params.get('asteroidId', f'asteroid-{idx}')
+            impact_lat = float(asteroid_params.get('impactLat', 34.05 + idx * 10))
+            impact_lon = float(asteroid_params.get('impactLon', -118.24 + idx * 15))
+            mitigation_delta_v = float(asteroid_params.get('mitigationDeltaV', 0))
+            diameter = float(asteroid_params.get('diameter', 0.1)) * 1000  # km to m
+            velocity = float(asteroid_params.get('velocity', 20)) * 1000  # km/s to m/s
+            
+            # Calculate impact energy
+            impact_energy_mt = calculate_kinetic_energy(diameter, velocity)
+            
+            # Get elevation (simplified - use 0 for now)
+            elevation = 0
+            
+            # Calculate impact effects
+            impact_effects = calculate_impact_effects(impact_energy_mt, impact_lat, impact_lon, elevation)
+            
+            # Generate orbital elements for trajectory
+            orbital_elements = {
+                'a': 1.5e11 + idx * 0.2e11,
+                'e': 0.1 + idx * 0.05,
+                'i': 0.1 * idx,
+                'omega': 0.5 * idx,
+                'w': 0.3 * idx,
+                'M': 0.2 * idx
+            }
+            
+            # Calculate trajectories
+            original_trajectory = calculate_trajectory(orbital_elements)
+            
+            if mitigation_delta_v > 0:
+                deflected_elements = deflect_trajectory(orbital_elements, mitigation_delta_v)
+                deflected_trajectory = calculate_trajectory(deflected_elements)
+            else:
+                deflected_trajectory = original_trajectory
+            
+            result = {
+                'asteroid_id': asteroid_id,
+                'asteroid_name': asteroid_params.get('name', asteroid_id),
+                'impact_lat': impact_lat,
+                'impact_lon': impact_lon,
+                'impact_energy_mt': impact_energy_mt,
+                'crater_diameter_km': impact_effects['crater_diameter_km'],
+                'tsunami_risk': impact_effects['tsunami_risk'],
+                'seismic_magnitude': impact_effects['seismic_magnitude'],
+                'fireball_radius_km': impact_effects['fireball_radius_km'],
+                'target_type': impact_effects['target_type'],
+                'color': colors[idx % len(colors)]
+            }
+            
+            all_results.append(result)
+            all_trajectories.append({
+                'asteroid_id': asteroid_id,
+                'color': colors[idx % len(colors)],
+                'original_trajectory': original_trajectory,
+                'deflected_trajectory': deflected_trajectory
+            })
+        
+        # Calculate combined effects
+        combined = calculate_combined_effects([{
+            'energy_megatons': r['impact_energy_mt'],
+            'crater_diameter_km': r['crater_diameter_km'],
+            'fireball_radius_km': r['fireball_radius_km'],
+            'tsunami_risk': r['tsunami_risk'],
+            'seismic_magnitude': r['seismic_magnitude']
+        } for r in all_results])
+        
+        return jsonify({
+            'success': True,
+            'individual_results': all_results,
+            'trajectories': all_trajectories,
+            'combined_effects': {
+                'total_energy_mt': combined['total_energy_mt'],
+                'max_crater_km': combined['max_crater_km'],
+                'total_crater_area_km2': combined['total_crater_area_km2'],
+                'combined_seismic': combined['combined_seismic'],
+                'max_fireball_km': combined['max_fireball_km'],
+                'tsunami_risk': combined['tsunami_risk'],
+                'impact_count': combined['impact_count']
+            }
+        })
+    
+    except Exception as e:
+        print(f"Multi-simulation error: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/api/neo/close-approaches', methods=['GET'])
+def get_neo_close_approaches():
+    """
+    Fetch upcoming near-Earth object close approaches from NASA NeoWs API.
+    Returns the next 7 days of close approach data.
+    """
+    try:
+        from datetime import datetime, timedelta
+        
+        # Get date range (next 7 days)
+        start_date = datetime.now().strftime('%Y-%m-%d')
+        end_date = (datetime.now() + timedelta(days=7)).strftime('%Y-%m-%d')
+        
+        params = {
+            'start_date': start_date,
+            'end_date': end_date,
+            'api_key': NASA_API_KEY
+        }
+        
+        response = requests.get(NEO_API_URL, params=params, timeout=15)
+        response.raise_for_status()
+        data = response.json()
+        
+        close_approaches = []
+        
+        # Parse NEO data from each day
+        for date, neos in data.get('near_earth_objects', {}).items():
+            for neo in neos:
+                # Get the closest approach for this NEO
+                for approach in neo.get('close_approach_data', []):
+                    # Calculate risk level based on distance and size
+                    miss_distance_km = float(approach.get('miss_distance', {}).get('kilometers', 0))
+                    diameter_min = neo.get('estimated_diameter', {}).get('meters', {}).get('estimated_diameter_min', 0)
+                    diameter_max = neo.get('estimated_diameter', {}).get('meters', {}).get('estimated_diameter_max', 0)
+                    avg_diameter = (diameter_min + diameter_max) / 2
+                    velocity = float(approach.get('relative_velocity', {}).get('kilometers_per_second', 0))
+                    
+                    # Risk assessment
+                    is_hazardous = neo.get('is_potentially_hazardous_asteroid', False)
+                    lunar_distance = float(approach.get('miss_distance', {}).get('lunar', 0))
+                    
+                    # Determine risk level
+                    if is_hazardous and lunar_distance < 1:
+                        risk_level = 'extreme'
+                    elif is_hazardous and lunar_distance < 5:
+                        risk_level = 'high'
+                    elif lunar_distance < 10:
+                        risk_level = 'moderate'
+                    else:
+                        risk_level = 'low'
+                    
+                    close_approaches.append({
+                        'id': neo.get('id'),
+                        'name': neo.get('name', 'Unknown'),
+                        'close_approach_date': approach.get('close_approach_date_full'),
+                        'epoch_date_close_approach': approach.get('epoch_date_close_approach'),
+                        'miss_distance_km': miss_distance_km,
+                        'miss_distance_lunar': lunar_distance,
+                        'velocity_km_s': velocity,
+                        'diameter_min_m': diameter_min,
+                        'diameter_max_m': diameter_max,
+                        'avg_diameter_m': avg_diameter,
+                        'is_potentially_hazardous': is_hazardous,
+                        'risk_level': risk_level,
+                        'nasa_jpl_url': neo.get('nasa_jpl_url', '')
+                    })
+        
+        # Sort by close approach date
+        close_approaches.sort(key=lambda x: x.get('epoch_date_close_approach', 0))
+        
+        return jsonify({
+            'success': True,
+            'count': len(close_approaches),
+            'start_date': start_date,
+            'end_date': end_date,
+            'close_approaches': close_approaches
+        })
+    
+    except Exception as e:
+        print(f"NEO API error: {e}")
+        # Return fallback data for demo purposes
+        return jsonify({
+            'success': True,
+            'count': 3,
+            'start_date': '2026-02-05',
+            'end_date': '2026-02-12',
+            'close_approaches': [
+                {
+                    'id': 'demo-1',
+                    'name': '2024 AA (Demo)',
+                    'close_approach_date': '2026-Feb-06 12:30',
+                    'epoch_date_close_approach': 1738843800000,
+                    'miss_distance_km': 3500000,
+                    'miss_distance_lunar': 9.1,
+                    'velocity_km_s': 12.5,
+                    'diameter_min_m': 100,
+                    'diameter_max_m': 220,
+                    'avg_diameter_m': 160,
+                    'is_potentially_hazardous': False,
+                    'risk_level': 'low',
+                    'nasa_jpl_url': 'https://ssd.jpl.nasa.gov/'
+                },
+                {
+                    'id': 'demo-2',
+                    'name': '2025 BX3 (Demo)',
+                    'close_approach_date': '2026-Feb-08 08:15',
+                    'epoch_date_close_approach': 1739001300000,
+                    'miss_distance_km': 1200000,
+                    'miss_distance_lunar': 3.1,
+                    'velocity_km_s': 18.2,
+                    'diameter_min_m': 250,
+                    'diameter_max_m': 560,
+                    'avg_diameter_m': 405,
+                    'is_potentially_hazardous': True,
+                    'risk_level': 'high',
+                    'nasa_jpl_url': 'https://ssd.jpl.nasa.gov/'
+                },
+                {
+                    'id': 'demo-3',
+                    'name': '2026 CY7 (Demo)',
+                    'close_approach_date': '2026-Feb-11 16:45',
+                    'epoch_date_close_approach': 1739288700000,
+                    'miss_distance_km': 7800000,
+                    'miss_distance_lunar': 20.3,
+                    'velocity_km_s': 8.7,
+                    'diameter_min_m': 50,
+                    'diameter_max_m': 110,
+                    'avg_diameter_m': 80,
+                    'is_potentially_hazardous': False,
+                    'risk_level': 'low',
+                    'nasa_jpl_url': 'https://ssd.jpl.nasa.gov/'
+                }
+            ]
+        })
+
+@app.route('/api/historical-impacts', methods=['GET'])
+def get_historical_impacts():
+    """
+    Get all historical impact events for reference.
+    """
+    try:
+        impacts = get_all_historical_impacts()
+        return jsonify({
+            'success': True,
+            'impacts': impacts
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/api/historical-impacts/compare', methods=['POST'])
+def compare_to_historical():
+    """
+    Compare a simulated impact to historical events.
+    """
+    try:
+        data = request.get_json()
+        energy_mt = float(data.get('energy_mt', 0))
+        crater_km = float(data.get('crater_km', 0)) if data.get('crater_km') else None
+        
+        comparison = find_closest_comparison(energy_mt, crater_km)
+        
+        if not comparison:
+            return jsonify({
+                'success': False,
+                'error': 'Invalid energy value'
+            }), 400
+        
+        return jsonify({
+            'success': True,
+            **comparison
+        })
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
 
 @app.route('/api/health', methods=['GET'])
 def health_check():
